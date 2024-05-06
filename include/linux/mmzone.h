@@ -275,11 +275,15 @@ enum zone_watermarks {
 #define wmark_pages(z, i) (z->_watermark[i] + z->watermark_boost)
 
 struct per_cpu_pages {
+	//链表中的页面数量
 	int count;		/* number of pages in the list */
+	//zone的高水位
 	int high;		/* high watermark, emptying needed */
+	//每一次回收到伙伴系统的页面数量
 	int batch;		/* chunk size for buddy add/remove */
 
 	/* Lists of pages, one per migrate type stored on the pcp-lists */
+	//页面链表，分成多种迁移类型
 	struct list_head lists[MIGRATE_PCPTYPES];
 };
 
@@ -363,7 +367,7 @@ struct zone {
 	/* Read-mostly fields */
 
 	/* zone watermarks, access with *_wmark_pages(zone) macros */
-	unsigned long _watermark[NR_WMARK];
+	unsigned long _watermark[NR_WMARK]; //内存水线
 	unsigned long watermark_boost;
 
 	unsigned long nr_reserved_highatomic;
@@ -594,7 +598,9 @@ enum {
  * here to avoid dereferences into large structures and lookups of tables
  */
 struct zoneref {
+	//zone的地址
 	struct zone *zone;	/* Pointer to actual zone */
+	//zone的编号，0表示ZONE_DMA32，1表示ZONE_NORMAL，以此类推
 	int zone_idx;		/* zone_idx(zoneref->zone) */
 };
 
@@ -613,6 +619,11 @@ struct zoneref {
  * zonelist_node_idx()	- Return the index of the node for an entry
  */
 struct zonelist {
+	//每一个zoneref描述一个zone，其中排在第一个的zone是首选，其他是备选的
+	//注意：此处的序号和zoneref->zone_idx是逆序的，我理解这也是为什么套这一层
+	//ZONE_NORMAL: _zonerefs[0]->zone_idx=1
+	//ZONE_DMA32: _zonerefs[1]->zone_idx=0
+	//也就是说分配页面的时候会优先考虑ZONE_NORMAL
 	struct zoneref _zonerefs[MAX_ZONES_PER_ZONELIST + 1];
 };
 
@@ -632,6 +643,9 @@ extern struct page *mem_map;
 struct bootmem_data;
 typedef struct pglist_data { //描述一个node
 	struct zone node_zones[MAX_NR_ZONES];
+	//ZONELIST_FALLBACK指向本地的zone
+	//ZONELIST_NOFALLBACK在NUMA架构中指向远端的内存节点的zone
+	//那是不是意味着，一个node可以跨numa架构啊？
 	struct zonelist node_zonelists[MAX_ZONELISTS];
 	int nr_zones;
 #ifdef CONFIG_FLAT_NODE_MEM_MAP	/* means !SPARSEMEM */
@@ -967,6 +981,7 @@ static inline int zonelist_zone_idx(struct zoneref *zoneref)
 	return zoneref->zone_idx;
 }
 
+//返回zonelist对应node的编号，node包含很多zone
 static inline int zonelist_node_idx(struct zoneref *zoneref)
 {
 	return zone_to_nid(zoneref->zone);
@@ -1013,6 +1028,7 @@ static __always_inline struct zoneref *next_zones_zonelist(struct zoneref *z,
  * never NULL). This may happen either genuinely, or due to concurrent nodemask
  * update due to cpuset modification.
  */
+//返回zonelist中第一个zone或者低于给定的highest_zoneidx的第一个zone
 static inline struct zoneref *first_zones_zonelist(struct zonelist *zonelist,
 					enum zone_type highest_zoneidx,
 					nodemask_t *nodes)

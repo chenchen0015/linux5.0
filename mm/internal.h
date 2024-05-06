@@ -115,12 +115,12 @@ extern pmd_t *mm_find_pmd(struct mm_struct *mm, unsigned long address);
  * by a const pointer.
  */
 struct alloc_context {
-	struct zonelist *zonelist;
-	nodemask_t *nodemask;
-	struct zoneref *preferred_zoneref;
-	int migratetype;
-	enum zone_type high_zoneidx;
-	bool spread_dirty_pages;
+	struct zonelist *zonelist; //我理解是把一个node中的zone穿成链表
+	nodemask_t *nodemask; //内存节点的掩码，是不是说在哪个node上面分配
+	struct zoneref *preferred_zoneref; //node中首选的是哪个zone
+	int migratetype; //迁移类型
+	enum zone_type high_zoneidx; //表示允许分配内存的最高zone
+	bool spread_dirty_pages; //用于指定是否传播脏页，不懂
 };
 
 #define ac_classzone_idx(ac) zonelist_zone_idx(ac->preferred_zoneref)
