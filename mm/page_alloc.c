@@ -2329,7 +2329,7 @@ static void reserve_highatomic_pageblock(struct page *page, struct zone *zone,
 	 * Limit the number reserved to 1 pageblock or roughly 1% of a zone.
 	 * Check is race-prone but harmless.
 	 */
-	max_managed = (zone_managed_pages(zone) / 100) + pageblock_nr_pages;
+	max_managed = (zone_managed_pages(zone) / 100) + pageblock_nr_pages; //预留的上限
 	if (zone->nr_reserved_highatomic >= max_managed)
 		return;
 
@@ -2341,8 +2341,7 @@ static void reserve_highatomic_pageblock(struct page *page, struct zone *zone,
 
 	/* Yoink! */
 	mt = get_pageblock_migratetype(page);
-	if (!is_migrate_highatomic(mt) && !is_migrate_isolate(mt)
-	    && !is_migrate_cma(mt)) {
+	if (!is_migrate_highatomic(mt) && !is_migrate_isolate(mt) && !is_migrate_cma(mt)) {
 		zone->nr_reserved_highatomic += pageblock_nr_pages; //dji maxzoneorder=14申请不到内存的问题
 		set_pageblock_migratetype(page, MIGRATE_HIGHATOMIC);
 		move_freepages_block(zone, page, MIGRATE_HIGHATOMIC, NULL);
@@ -3561,6 +3560,8 @@ try_this_zone: //走到这说明该zone有足够的空间分配
 			 * If this is a high-order atomic allocation then check
 			 * if the pageblock should be reserved for the future
 			 */
+			//(dji)ALLOC_HARDER对应GFP_ATOMIC，意思是我现在申请了高阶内存，那么一会可能还用得到，所以我reserve一块这么大的空间
+			//如何reserve的？给zone->nr_reserved_highatomic加一个1<<max_zoneorder，分配的时候预留出来这么多
 			if (unlikely(order && (alloc_flags & ALLOC_HARDER)))
 				reserve_highatomic_pageblock(page, zone, order);
 

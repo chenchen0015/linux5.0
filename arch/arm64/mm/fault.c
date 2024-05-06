@@ -435,6 +435,9 @@ static bool is_el0_instruction_abort(unsigned int esr)
 	return ESR_ELx_EC(esr) == ESR_ELx_EC_IABT_LOW;
 }
 
+//addr：异常发生时的虚拟地址，由FSR提供
+//esr：异常发生时的异常状态，由ESR提供
+//regs：异常发生时的pt_regs寄存器值
 static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 				   struct pt_regs *regs)
 {
@@ -666,6 +669,11 @@ static int do_sea(unsigned long addr, unsigned int esr, struct pt_regs *regs)
 	return 0;
 }
 
+//ARM64 异常向量表
+//do_translation_fault：处理与页表转换相关的异常错误
+//do_page_fault：处理与页表访问或者权限相关的异常
+//do_alignment_fault()：处理与对齐相关的异常错误
+//do_bad()：处理与未知的错误或者硬件相关的错误，如TLB冲突等
 static const struct fault_info fault_info[] = {
 	{ do_bad,		SIGKILL, SI_KERNEL,	"ttbr address size fault"	},
 	{ do_bad,		SIGKILL, SI_KERNEL,	"level 1 address size fault"	},

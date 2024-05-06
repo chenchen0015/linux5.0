@@ -61,6 +61,8 @@ extern unsigned int pageblock_order;
 
 #endif /* CONFIG_HUGETLB_PAGE */
 
+//当MAX_ORDER=11，pageblock = pow(2,11)*4/1024 = 8M
+//当MAX_ORDER=14，pageblock = pow(2,14)*4/1024 = 64M
 #define pageblock_nr_pages	(1UL << pageblock_order)
 
 /* Forward declaration */
