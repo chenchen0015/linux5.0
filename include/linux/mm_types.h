@@ -67,6 +67,7 @@ struct hmm;
 #define _struct_page_alignment
 #endif
 
+//4KB的页需要64B的struct page，那么1GB内存需要16MB
 struct page {
 	//8字节，原子的标志位
 	unsigned long flags;		/* Atomic flags, some possibly
@@ -178,8 +179,8 @@ struct page {
 		 * If the page can be mapped to userspace, encodes the number
 		 * of times this page is referenced by a page table.
 		 */
-		//表示这个页面被用户态映射的次数
-		//若为-1：没有PTE映射到该页面
+		//表示这个页面被用户态映射的次数(只表示这个)
+		//若为-1：没有PTE映射到该页面，此时才可以回收页面
 		//若为0：表示只有父进程映射到该页面。也就是匿名页分配时的状态，有一个进程在用
 		//若>0：表示除了父进程外，还有其他进程映射到这个页面上了。比如在fork子进程的时候使用的COW技术
 		atomic_t _mapcount;

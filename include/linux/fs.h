@@ -422,7 +422,7 @@ int pagecache_write_end(struct file *, struct address_space *mapping,
  * @private_data: For use by the owner of the address_space.
  */
 struct address_space {
-	struct inode		*host;
+	struct inode		*host; //文件映射对应的文件节点inode
 	struct xarray		i_pages;
 	gfp_t			gfp_mask;
 	atomic_t		i_mmap_writable;
@@ -431,7 +431,7 @@ struct address_space {
 	unsigned long		nrpages;
 	unsigned long		nrexceptional;
 	pgoff_t			writeback_index;
-	const struct address_space_operations *a_ops;
+	const struct address_space_operations *a_ops; //该节点对应的操作函数方法集
 	unsigned long		flags;
 	errseq_t		wb_err;
 	spinlock_t		private_lock;

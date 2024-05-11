@@ -790,8 +790,8 @@ copy_one_pte(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 
 	page = vm_normal_page(vma, addr, pte);
 	if (page) {
-		get_page(page);
-		page_dup_rmap(page, false);
+		get_page(page); //增加_refcount计数
+		page_dup_rmap(page, false); //增加_mapcount计数
 		rss[mm_counter(page)]++;
 	} else if (pte_devmap(pte)) {
 		page = pte_page(pte);
@@ -813,6 +813,8 @@ out_set_pte:
 	return 0;
 }
 
+//do_fork()→copy_process()→copy_mm()→dup_mmap()→copy_pte_range()→copy_one_pte()
+//fork子进程时拷贝PAGE，在copy_one_pte中使用COW技术，只增加refcount和mapcount值
 static int copy_pte_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 		   pmd_t *dst_pmd, pmd_t *src_pmd, struct vm_area_struct *vma,
 		   unsigned long addr, unsigned long end)
@@ -2478,7 +2480,7 @@ static vm_fault_t wp_page_shared(struct vm_fault *vmf)
  * but allow concurrent faults), with pte both mapped and locked.
  * We return with mmap_sem still held, but pte unmapped and unlocked.
  */
-static vm_fault_t do_wp_page(struct vm_fault *vmf)
+static vm_fault_t do_wp_page(struct vm_fault *vmf) //写时复制
 	__releases(vmf->ptl)
 {
 	struct vm_area_struct *vma = vmf->vma;
@@ -2874,7 +2876,7 @@ out_release:
  * but allow concurrent faults), and pte mapped but not yet locked.
  * We return with mmap_sem still held, but pte unmapped and unlocked.
  */
-static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
+static vm_fault_t do_anonymous_page(struct vm_fault *vmf) //缺页异常
 {
 	struct vm_area_struct *vma = vmf->vma;
 	struct mem_cgroup *memcg;
@@ -2924,6 +2926,7 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	}
 
 	/* Allocate our own private page. */
+	//重点函数：RMAP prepare
 	if (unlikely(anon_vma_prepare(vma)))
 		goto oom;
 	page = alloc_zeroed_user_highpage_movable(vma, vmf->address);
@@ -2963,6 +2966,7 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	}
 
 	inc_mm_counter_fast(vma->vm_mm, MM_ANONPAGES);
+	//重点函数：add pte mapping to a new anonymous page
 	page_add_new_anon_rmap(page, vma, vmf->address, false);
 	mem_cgroup_commit_charge(page, memcg, false, false);
 	lru_cache_add_active_or_unevictable(page, vma);

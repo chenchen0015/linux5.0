@@ -129,25 +129,26 @@ enum numa_stat_item {
 #define NR_VM_NUMA_STAT_ITEMS 0
 #endif
 
+//node、zone、vmstat统计值都是这些项
 enum zone_stat_item {
 	/* First 128 byte cacheline (assuming 64 bit words) */
-	NR_FREE_PAGES,
-	NR_ZONE_LRU_BASE, /* Used only for compaction and reclaim retry */
-	NR_ZONE_INACTIVE_ANON = NR_ZONE_LRU_BASE,
-	NR_ZONE_ACTIVE_ANON,
-	NR_ZONE_INACTIVE_FILE,
-	NR_ZONE_ACTIVE_FILE,
-	NR_ZONE_UNEVICTABLE,
-	NR_ZONE_WRITE_PENDING,	/* Count of dirty, writeback and unstable pages */
-	NR_MLOCK,		/* mlock()ed pages found and moved off LRU */
-	NR_PAGETABLE,		/* used for pagetables */
-	NR_KERNEL_STACK_KB,	/* measured in KiB */
+	NR_FREE_PAGES, //空闲页面的数量
+	NR_ZONE_LRU_BASE, /* Used only for compaction and reclaim retry */ //这只是个标签，计数不计入
+	NR_ZONE_INACTIVE_ANON = NR_ZONE_LRU_BASE, //不活跃匿名页
+	NR_ZONE_ACTIVE_ANON, //活跃匿名页
+	NR_ZONE_INACTIVE_FILE, //不活跃文件页
+	NR_ZONE_ACTIVE_FILE, //活跃文件页
+	NR_ZONE_UNEVICTABLE, //不可回收页
+	NR_ZONE_WRITE_PENDING,	/* Count of dirty, writeback and unstable pages */ //脏页 正在回写 不稳定的页面数量
+	NR_MLOCK,		/* mlock()ed pages found and moved off LRU */ //mlock页面数量
+	NR_PAGETABLE,		/* used for pagetables */ //用作页表的页面数量
+	NR_KERNEL_STACK_KB,	/* measured in KiB */ //用作内核栈的页面数量
 	/* Second 128 byte cacheline */
-	NR_BOUNCE,
+	NR_BOUNCE, //跳跃页面的数量=>arm64不涉及
 #if IS_ENABLED(CONFIG_ZSMALLOC)
-	NR_ZSPAGES,		/* allocated in zsmalloc */
+	NR_ZSPAGES,		/* allocated in zsmalloc */ //用于zsmalloc机制的页面数量
 #endif
-	NR_FREE_CMA_PAGES,
+	NR_FREE_CMA_PAGES, //CMA中的空闲页面数量
 	NR_VM_ZONE_STAT_ITEMS };
 
 enum node_stat_item {

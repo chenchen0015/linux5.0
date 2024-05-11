@@ -26,8 +26,12 @@
  * the anon_vma object itself: we're guaranteed no page can be
  * pointing to this anon_vma once its vma list is empty.
  */
-struct anon_vma {
-	struct anon_vma *root;		/* Root of this anon_vma tree */
+//主要用于连接struct page和struct vma
+//page->mapping = anon_vma，vm_area_struct->anon_vma = anon_vma
+//anon_vma->rb_root(AVC)->vma = vm_area_struct
+struct anon_vma { //VA是per VMA的
+	//AforkBforkC，孙进程C的root指向父进程A
+	struct anon_vma *root;	//指向祖宗(root)进程的anon_vma	/* Root of this anon_vma tree */
 	struct rw_semaphore rwsem;	/* W: modification, R: walking the list */
 	/*
 	 * The refcount is taken on an anon_vma when there is no
@@ -36,7 +40,7 @@ struct anon_vma {
 	 * the reference is responsible for clearing up the
 	 * anon_vma if they are the last user on release
 	 */
-	atomic_t refcount;
+	atomic_t refcount; //引用计数
 
 	/*
 	 * Count of child anon_vmas and VMAs which points to this anon_vma.
@@ -46,7 +50,8 @@ struct anon_vma {
 	 */
 	unsigned degree;
 
-	struct anon_vma *parent;	/* Parent of this anon_vma */
+	//AforkBforkC，孙进程C的parent指向子进程B
+	struct anon_vma *parent; //指向父进程的anon_vma	/* Parent of this anon_vma */
 
 	/*
 	 * NOTE: the LSB of the rb_root.rb_node is set by
@@ -58,6 +63,7 @@ struct anon_vma {
 	 */
 
 	/* Interval tree of private "related" vmas */
+	//里面成员是自己的AVC和"所有连接自己和子进程AVC"的红黑树
 	struct rb_root_cached rb_root;
 };
 
@@ -74,11 +80,19 @@ struct anon_vma {
  * The "rb" field indexes on an interval tree the anon_vma_chains
  * which link all the VMAs associated with this anon_vma.
  */
+/* AVC有两种功能：(对于两种功能，各个成员的指向意义不同)
+ * 1、连接本进程的VMA和AV，该种情况下AVC是per VMA的
+ * 2、连接父(所有前辈进程)进程的AV与子(孙)进程的VMA，该种情况数量为进程的前辈进程数量
+ */
+/* 对于某一个进程
+ * 如果想往父进程或爷进程的方向找，那么找VMA->anon_vma_chain(AVC)链表
+ * 如果想往子进程或孙进程的方向找，那么找VMA->AV->rb_root(AVC)红黑树
+ */
 struct anon_vma_chain {
-	struct vm_area_struct *vma;
-	struct anon_vma *anon_vma;
-	struct list_head same_vma;   /* locked by mmap_sem & page_table_lock */
-	struct rb_node rb;			/* locked by anon_vma->rwsem */
+	struct vm_area_struct *vma;  //指向VMA
+	struct anon_vma *anon_vma; //指向AV
+	struct list_head same_vma; //把自己挂在VMA->anon_vma_chain链表上 /* locked by mmap_sem & page_table_lock */
+	struct rb_node rb;		   //把自己挂在anon_vma->rb_root红黑树上 /* locked by anon_vma->rwsem */
 	unsigned long rb_subtree_last;
 #ifdef CONFIG_DEBUG_VM_RB
 	unsigned long cached_vma_start, cached_vma_last;
@@ -259,6 +273,7 @@ int page_mapped_in_vma(struct page *page, struct vm_area_struct *vma);
  * anon_lock: for getting anon_lock by optimized way rather than default
  * invalid_vma: for skipping uninterested vma
  */
+//内核中有3种页面需要做unmap操作-KSM页面、匿名页面和文件映射页面，因此定义一个rmap_walk_control数据结构来统一管理unmap操作
 struct rmap_walk_control {
 	void *arg;
 	/*

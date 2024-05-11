@@ -5003,9 +5003,9 @@ EXPORT_SYMBOL_GPL(si_mem_available);
 
 void si_meminfo(struct sysinfo *val)
 {
-	val->totalram = totalram_pages();
-	val->sharedram = global_node_page_state(NR_SHMEM);
-	val->freeram = global_zone_page_state(NR_FREE_PAGES);
+	val->totalram = totalram_pages(); //totalram读取全局变量_totalram_pages
+	val->sharedram = global_node_page_state(NR_SHMEM); //vm_node_stat[]中读取
+	val->freeram = global_zone_page_state(NR_FREE_PAGES); //vm_node_stat[]中读取
 	val->bufferram = nr_blockdev_pages();
 	val->totalhigh = totalhigh_pages();
 	val->freehigh = nr_free_highpages();

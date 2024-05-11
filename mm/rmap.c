@@ -197,7 +197,7 @@ int __anon_vma_prepare(struct vm_area_struct *vma)
 	/* page_table_lock to protect against threads */
 	spin_lock(&mm->page_table_lock);
 	if (likely(!vma->anon_vma)) {
-		vma->anon_vma = anon_vma;
+		vma->anon_vma = anon_vma; //建立关系
 		anon_vma_chain_link(vma, avc, anon_vma);
 		/* vma reference or self-parent link for new root */
 		anon_vma->degree++;
@@ -1031,7 +1031,7 @@ static void __page_set_anon_rmap(struct page *page,
 
 	BUG_ON(!anon_vma);
 
-	if (PageAnon(page))
+	if (PageAnon(page)) //匿名页为什么return? => 应该是"首次flag"，下面设置了PAGE_MAPPING_ANON
 		return;
 
 	/*
@@ -1044,7 +1044,7 @@ static void __page_set_anon_rmap(struct page *page,
 
 	anon_vma = (void *) anon_vma + PAGE_MAPPING_ANON;
 	page->mapping = (struct address_space *) anon_vma;
-	page->index = linear_page_index(vma, address);
+	page->index = linear_page_index(vma, address); //自己是VMA中的第几个页面
 }
 
 /**
@@ -1155,7 +1155,7 @@ void page_add_new_anon_rmap(struct page *page,
 	int nr = compound ? hpage_nr_pages(page) : 1;
 
 	VM_BUG_ON_VMA(address < vma->vm_start || address >= vma->vm_end, vma);
-	__SetPageSwapBacked(page);
+	__SetPageSwapBacked(page); //设置页可以被交换到磁盘
 	if (compound) {
 		VM_BUG_ON_PAGE(!PageTransHuge(page), page);
 		/* increment count (starts at -1) */
@@ -1165,10 +1165,10 @@ void page_add_new_anon_rmap(struct page *page,
 		/* Anon THP always mapped first with PMD */
 		VM_BUG_ON_PAGE(PageTransCompound(page), page);
 		/* increment count (starts at -1) */
-		atomic_set(&page->_mapcount, 0);
+		atomic_set(&page->_mapcount, 0); //有父进程映射之后mapcount=0，初始为-1
 	}
-	__mod_node_page_state(page_pgdat(page), NR_ANON_MAPPED, nr);
-	__page_set_anon_rmap(page, vma, address, 1);
+	__mod_node_page_state(page_pgdat(page), NR_ANON_MAPPED, nr); //增加页面所在的zone的匿名页面计数，NR_ANON_MAPPED类型
+	__page_set_anon_rmap(page, vma, address, 1); //设置页面的反向映射关系
 }
 
 /**
@@ -1695,13 +1695,15 @@ static int page_mapcount_is_zero(struct page *page)
  *
  * If unmap is successful, return true. Otherwise, false.
  */
+//典型场景：kswapd内核线程为了回收页面，需要断开所有映射到该匿名页面的用户PTE
+//页面迁移时，需要断开所有映射到匿名页面的用户PTE
 bool try_to_unmap(struct page *page, enum ttu_flags flags)
 {
 	struct rmap_walk_control rwc = {
-		.rmap_one = try_to_unmap_one,
+		.rmap_one = try_to_unmap_one, //表示断开某vma上某page映射的PTE
 		.arg = (void *)flags,
-		.done = page_mapcount_is_zero,
-		.anon_lock = page_lock_anon_vma_read,
+		.done = page_mapcount_is_zero, //判断某一个页面是否断开成功
+		.anon_lock = page_lock_anon_vma_read, //实现一个锁机制
 	};
 
 	/*
@@ -1719,9 +1721,9 @@ bool try_to_unmap(struct page *page, enum ttu_flags flags)
 	if (flags & TTU_RMAP_LOCKED)
 		rmap_walk_locked(page, &rwc);
 	else
-		rmap_walk(page, &rwc);
+		rmap_walk(page, &rwc); //核心函数
 
-	return !page_mapcount(page) ? true : false;
+	return !page_mapcount(page) ? true : false; //如果mapcount为-1，则说明映射全部解除
 }
 
 static int page_not_mapped(struct page *page)
@@ -1799,6 +1801,7 @@ static struct anon_vma *rmap_walk_anon_lock(struct page *page,
  * vm_flags for that VMA.  That should be OK, because that vma shouldn't be
  * LOCKED.
  */
+//page表示要解除映射的page，locked表示是否已经加锁
 static void rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 		bool locked)
 {
@@ -1807,19 +1810,21 @@ static void rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 	struct anon_vma_chain *avc;
 
 	if (locked) {
-		anon_vma = page_anon_vma(page);
+		anon_vma = page_anon_vma(page); //获取page中的av指针
 		/* anon_vma disappear under us? */
 		VM_BUG_ON_PAGE(!anon_vma, page);
 	} else {
-		anon_vma = rmap_walk_anon_lock(page, rwc);
+		anon_vma = rmap_walk_anon_lock(page, rwc); //先加锁再获取
 	}
 	if (!anon_vma)
 		return;
 
 	pgoff_start = page_to_pgoff(page);
 	pgoff_end = pgoff_start + hpage_nr_pages(page) - 1;
-	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root,
-			pgoff_start, pgoff_end) {
+
+	//核心：遍历anon_vma->rb_root红黑树中的anon_vma_chain
+	//page指向的是最父的父进程，相当于遍历所有与这个page有关的进程的vma
+	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root, pgoff_start, pgoff_end) {
 		struct vm_area_struct *vma = avc->vma;
 		unsigned long address = vma_address(page, vma);
 
@@ -1828,7 +1833,7 @@ static void rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 		if (rwc->invalid_vma && rwc->invalid_vma(vma, rwc->arg))
 			continue;
 
-		if (!rwc->rmap_one(page, vma, address, rwc->arg))
+		if (!rwc->rmap_one(page, vma, address, rwc->arg)) //rmap_one 实际解除映射的函数
 			break;
 		if (rwc->done && rwc->done(page))
 			break;
@@ -1897,7 +1902,7 @@ void rmap_walk(struct page *page, struct rmap_walk_control *rwc)
 {
 	if (unlikely(PageKsm(page)))
 		rmap_walk_ksm(page, rwc);
-	else if (PageAnon(page))
+	else if (PageAnon(page)) //匿名页rmap遍历
 		rmap_walk_anon(page, rwc, false);
 	else
 		rmap_walk_file(page, rwc, false);
