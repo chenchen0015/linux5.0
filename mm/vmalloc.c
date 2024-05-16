@@ -404,7 +404,7 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 				unsigned long vstart, unsigned long vend,
 				int node, gfp_t gfp_mask)
 {
-	struct vmap_area *va;
+	struct vmap_area *va; //使用vmap_area来描述一个vmalloc区域
 	struct rb_node *n;
 	unsigned long addr;
 	int purged = 0;
@@ -416,7 +416,7 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 
 	might_sleep();
 
-	va = kmalloc_node(sizeof(struct vmap_area),
+	va = kmalloc_node(sizeof(struct vmap_area), //申请一个struct vmap_area
 			gfp_mask & GFP_RECLAIM_MASK, node);
 	if (unlikely(!va))
 		return ERR_PTR(-ENOMEM);
@@ -438,6 +438,7 @@ retry:
 	 * Note that __free_vmap_area may update free_vmap_cache
 	 * without updating cached_hole_size or cached_align.
 	 */
+	//if的路径1是几年前添加的优化选项，核心思想是从上一次查找的结果中开始查找，我们忽略&关注路径2
 	if (!free_vmap_cache ||
 			size < cached_hole_size ||
 			vstart < cached_vstart ||
@@ -459,14 +460,15 @@ nocache:
 		if (addr + size < addr)
 			goto overflow;
 
-	} else {
-		addr = ALIGN(vstart, align);
+	} else { //路径2
+		addr = ALIGN(vstart, align); //我们从VMALLOC_START开始遍历
 		if (addr + size < addr)
 			goto overflow;
 
 		n = vmap_area_root.rb_node;
 		first = NULL;
 
+		//找到vstart应该插在红黑树的哪个节点后面
 		while (n) {
 			struct vmap_area *tmp;
 			tmp = rb_entry(n, struct vmap_area, rb_node);
@@ -484,6 +486,8 @@ nocache:
 	}
 
 	/* from the starting point, walk areas until a suitable hole is found */
+	//从VMALLOC_START的地址开始，查找每个已存在的vmalloc区域的缝隙能否容纳目前分配请求的大小
+	//如果已有vmalloc区域的缝隙不能容纳，那么从最后一块vmalloc区域的结束地址开辟一个新的vmalloc区域
 	while (addr + size > first->va_start && addr + size <= vend) {
 		if (addr + cached_hole_size < first->va_start)
 			cached_hole_size = first->va_start - addr;
@@ -504,7 +508,7 @@ found:
 	va->va_start = addr;
 	va->va_end = addr + size;
 	va->flags = 0;
-	__insert_vmap_area(va);
+	__insert_vmap_area(va); //找到合适的插入地方后，将这块空间插入红黑树中
 	free_vmap_cache = &va->rb_node;
 	spin_unlock(&vmap_area_lock);
 
@@ -512,7 +516,7 @@ found:
 	BUG_ON(va->va_start < vstart);
 	BUG_ON(va->va_end > vend);
 
-	return va;
+	return va; //返回vmap_area描述的vmalloc空间
 
 overflow:
 	spin_unlock(&vmap_area_lock);
@@ -1336,8 +1340,8 @@ EXPORT_SYMBOL_GPL(unmap_kernel_range);
 
 int map_vm_area(struct vm_struct *area, pgprot_t prot, struct page **pages)
 {
-	unsigned long addr = (unsigned long)area->addr;
-	unsigned long end = addr + get_vm_area_size(area);
+	unsigned long addr = (unsigned long)area->addr; //虚拟地址起始
+	unsigned long end = addr + get_vm_area_size(area); //虚拟地址结束
 	int err;
 
 	err = vmap_page_range(addr, end, prot, pages);
@@ -1377,22 +1381,26 @@ static struct vm_struct *__get_vm_area_node(unsigned long size,
 	struct vmap_area *va;
 	struct vm_struct *area;
 
-	BUG_ON(in_interrupt());
-	size = PAGE_ALIGN(size);
+	BUG_ON(in_interrupt()); //确保不在中断上下文中，因为vmalloc可能会睡眠
+	size = PAGE_ALIGN(size); //分配的大小按页面size对齐
 	if (unlikely(!size))
 		return NULL;
 
+	//如果分配内存用于IOREMAP，那么默认情况按128个页面对齐
 	if (flags & VM_IOREMAP)
 		align = 1ul << clamp_t(int, get_count_order_long(size),
 				       PAGE_SHIFT, IOREMAP_MAX_ORDER);
 
+	//分配一个vm_struct来描述这个vmalloc区域
 	area = kzalloc_node(sizeof(*area), gfp_mask & GFP_RECLAIM_MASK, node);
 	if (unlikely(!area))
 		return NULL;
 
+	//如果没有定义NO_GUARD，那么会多分配一个页面，以方便备用。例如分配4KB，实际会分配8KB
 	if (!(flags & VM_NO_GUARD))
 		size += PAGE_SIZE;
 
+	//分配虚拟地址空间的核心函数，在vmalloc虚拟空间红黑树中找一段合适空间，信息放在va中传回来
 	va = alloc_vmap_area(size, align, start, end, node, gfp_mask);
 	if (IS_ERR(va)) {
 		kfree(area);
@@ -1661,28 +1669,28 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	unsigned int nr_pages, array_size, i;
 	const gfp_t nested_gfp = (gfp_mask & GFP_RECLAIM_MASK) | __GFP_ZERO;
 	const gfp_t alloc_mask = gfp_mask | __GFP_NOWARN;
-	const gfp_t highmem_mask = (gfp_mask & (GFP_DMA | GFP_DMA32)) ?
-					0 :
-					__GFP_HIGHMEM;
+	//当没有指定必须从DMA的zone分配内存时，优先使用高端内存
+	const gfp_t highmem_mask = (gfp_mask & (GFP_DMA | GFP_DMA32)) ? 0 : __GFP_HIGHMEM;
 
-	nr_pages = get_vm_area_size(area) >> PAGE_SHIFT;
+	nr_pages = get_vm_area_size(area) >> PAGE_SHIFT; //计算刚才申请的虚拟地址空间中有多少页面
 	array_size = (nr_pages * sizeof(struct page *));
 
 	area->nr_pages = nr_pages;
 	/* Please note that the recursion is strictly bounded. */
-	if (array_size > PAGE_SIZE) {
+	if (array_size > PAGE_SIZE) { //申请保存物理页面地址的指针数组
 		pages = __vmalloc_node(array_size, 1, nested_gfp|highmem_mask,
 				PAGE_KERNEL, node, area->caller);
 	} else {
 		pages = kmalloc_node(array_size, nested_gfp, node);
 	}
-	area->pages = pages;
+	area->pages = pages; //使用area->pages保存已分配页面的page数据结构的指针
 	if (!area->pages) {
 		remove_vm_area(area->addr);
 		kfree(area);
 		return NULL;
 	}
 
+	//遍历所有area->nr_pages，使用alloc_pages_node申请物理内存一个page
 	for (i = 0; i < area->nr_pages; i++) {
 		struct page *page;
 
@@ -1701,6 +1709,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 			cond_resched();
 	}
 
+	//建立虚拟地址到物理地址的映射
 	if (map_vm_area(area, prot, pages))
 		goto fail;
 	return area->addr;
@@ -1729,6 +1738,9 @@ fail:
  *	allocator with @gfp_mask flags.  Map them into contiguous
  *	kernel virtual space, using a pagetable protection of @prot.
  */
+//vmalloc的核心实现
+//vmalloc分配的大小以页面对齐，比如分配10B，实际会分配4k，浪费4086B
+//vmalloc分配过程可能会睡眠
 void *__vmalloc_node_range(unsigned long size, unsigned long align,
 			unsigned long start, unsigned long end, gfp_t gfp_mask,
 			pgprot_t prot, unsigned long vm_flags, int node,
@@ -1742,11 +1754,13 @@ void *__vmalloc_node_range(unsigned long size, unsigned long align,
 	if (!size || (size >> PAGE_SHIFT) > totalram_pages())
 		goto fail;
 
+	//申请虚拟地址空间
 	area = __get_vm_area_node(size, align, VM_ALLOC | VM_UNINITIALIZED |
 				vm_flags, start, end, node, gfp_mask, caller);
 	if (!area)
 		goto fail;
 
+	//申请物理空间+做映射
 	addr = __vmalloc_area_node(area, gfp_mask, prot, node);
 	if (!addr)
 		return NULL;
@@ -1826,10 +1840,9 @@ void *__vmalloc_node_flags_caller(unsigned long size, int node, gfp_t flags,
  *	For tight control over page level allocator and protection flags
  *	use __vmalloc() instead.
  */
-void *vmalloc(unsigned long size)
+void *vmalloc(unsigned long size) //vmalloc主函数
 {
-	return __vmalloc_node_flags(size, NUMA_NO_NODE,
-				    GFP_KERNEL);
+	return __vmalloc_node_flags(size, NUMA_NO_NODE, GFP_KERNEL);
 }
 EXPORT_SYMBOL(vmalloc);
 

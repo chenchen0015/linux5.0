@@ -43,8 +43,8 @@ struct vm_struct {
 };
 
 struct vmap_area {
-	unsigned long va_start;
-	unsigned long va_end;
+	unsigned long va_start; //申请到的虚拟地址空间的起始地址
+	unsigned long va_end; //~的结束地址
 	unsigned long flags;
 	struct rb_node rb_node;         /* address sorted rbtree */
 	struct list_head list;          /* address sorted list */
