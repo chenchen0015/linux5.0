@@ -1992,7 +1992,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 	struct page *page;
 
 	/* Find a page of the appropriate size in the preferred list */
-	for (current_order = order; current_order < MAX_ORDER; ++current_order) {
+	for (current_order = order; current_order < MAX_ORDER; ++current_order) { //从待分配order开始遍历
 		area = &(zone->free_area[current_order]);
 		page = list_first_entry_or_null(&area->free_list[migratetype], struct page, lru);
 		if (!page)
@@ -2343,8 +2343,8 @@ static void reserve_highatomic_pageblock(struct page *page, struct zone *zone,
 	mt = get_pageblock_migratetype(page);
 	if (!is_migrate_highatomic(mt) && !is_migrate_isolate(mt) && !is_migrate_cma(mt)) {
 		zone->nr_reserved_highatomic += pageblock_nr_pages; //dji maxzoneorder=14申请不到内存的问题
-		set_pageblock_migratetype(page, MIGRATE_HIGHATOMIC);
-		move_freepages_block(zone, page, MIGRATE_HIGHATOMIC, NULL);
+		set_pageblock_migratetype(page, MIGRATE_HIGHATOMIC); //将page类型设置为MIGRATE_HIGHATOMIC
+		move_freepages_block(zone, page, MIGRATE_HIGHATOMIC, NULL); //将page的lru成员挂在对应的free_page上面
 	}
 
 out_unlock:
@@ -3115,7 +3115,7 @@ struct page *rmqueue(struct zone *preferred_zone,
 		page = NULL;
 		if (alloc_flags & ALLOC_HARDER) {
 			//__rmqueue_smallest是在__rmqueue中调用的核心函数，实际执行分配
-			page = __rmqueue_smallest(zone, order, MIGRATE_HIGHATOMIC);
+			page = __rmqueue_smallest(zone, order, MIGRATE_HIGHATOMIC); //这里允许分配MIGRATE_HIGHATOMIC类型
 			if (page)
 				trace_mm_page_alloc_zone_locked(page, order, migratetype);
 		}
@@ -3289,7 +3289,7 @@ bool __zone_watermark_ok(struct zone *z, unsigned int order, unsigned long mark,
 	 * are not met, then a high-order request also cannot go ahead
 	 * even if a suitable page happened to be free.
 	 */
-	if (free_pages <= min + z->lowmem_reserve[classzone_idx]) //这里怎么还有一块reserve呢？
+	if (free_pages <= min + z->lowmem_reserve[classzone_idx]) //lowmem_reserve是为了高zone不侵占低zone而设计的
 		return false;
 
 	/* If this is an order-0 request then the watermark is fine */
@@ -3353,7 +3353,7 @@ static inline bool zone_watermark_fast(struct zone *z, unsigned int order,
 	 * list. That corner case is then slower but it is harmless.
 	 */
 	//这里针对order=0的情况做快速检查，剩余内存页数 > 水线 + "z->lowmem_reserve[classzone_idx]"
-	//z->lowmem_reserve[classzone_idx]这个东西应该就是dji那个config_max_zoneorder的问题吧？
+	//z->lowmem_reserve[classzone_idx]这个东西应该就是dji那个config_max_zoneorder的问题吧？不是，那个是nr_reserved_highatomic
 	//lowmem_reserve。它是每个zone预留的内存，为了防止高端zone在没内存的情况下过度使用低端zone的内存资源
 	if (!order && (free_pages - cma_pages) > mark + z->lowmem_reserve[classzone_idx])
 		return true;
@@ -3508,7 +3508,7 @@ retry:
 			//走到这里，说明当前zone不满足内存分配的需求，此时分为两种情况
 			//若node_reclaim_mode为0，则表示可以从下一个zone或者内存节点中分配内存
 			//若node_reclaim_mode为1，表示可以在这个zone中尝试一些回收的动作，调用node_reclaim函数
-			//通常情况下，zone_reclaim_mode模式是关闭的
+			//通常情况下，node_reclaim_mode模式是关闭的
 			int ret;
 
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
@@ -4301,6 +4301,7 @@ retry_cpuset:
 	 * alloc_flags precisely. So we do that now.
 	 */
 	//两种mask格式的转换，gfp是对用户的，alloc_flags是内部的
+	//因为进入了慢速路径，所以对水位也有所调整；快速路径策略保守，这里激进
 	alloc_flags = gfp_to_alloc_flags(gfp_mask);
 
 	/*
